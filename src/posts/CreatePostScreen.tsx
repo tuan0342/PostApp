@@ -30,9 +30,6 @@ import {
   launchImageLibrary,
 } from 'react-native-image-picker';
 import distances from '../base/utils/distances';
-import storage from '@react-native-firebase/storage';
-import AsyncStorage from '@react-native-async-storage/async-storage';
-import {User} from '../base/types/user';
 
 interface Props {
   navigation: RootNavigationProp<Routes.CreatePost>;
@@ -44,9 +41,6 @@ const CreatePostScreen: React.FC<Props> = props => {
   const [title, setTitle] = useState<string>('');
   const [caption, setCaption] = useState<string>('');
   const [imagesList, setImagesList] = useState<string[]>([]);
-
-  const [uploading, setUploading] = useState<boolean>(false);
-  const [transferred, setTransferred] = useState(0);
 
   const isValidation = () => {
     return title!.trim().length > 0 && caption!.trim().length > 0;
@@ -125,46 +119,6 @@ const CreatePostScreen: React.FC<Props> = props => {
     );
   };
 
-  const submitImages = async () => {
-    const uploadUri = imagesList[0];
-    let filename = uploadUri.substring(uploadUri.lastIndexOf('/') + 1);
-    const extension = filename.split('.').pop();
-    const name = filename.split('.').slice(0, -1).join('.');
-    filename = name + Date.now() + extension;
-
-    const myInfoJson = await AsyncStorage.getItem('infoUser');
-    const myInfo: User = myInfoJson != null ? JSON.parse(myInfoJson) : null;
-
-    setUploading(true);
-    setTransferred(0);
-
-    const task = storage()
-      .ref(`images/${myInfo.id}/${filename}`)
-      .putFile(uploadUri);
-
-    //set transferred state
-    task.on('state_changed', taskSnapshot => {
-      setTransferred(
-        Math.round(taskSnapshot.bytesTransferred / taskSnapshot.totalBytes) *
-          100,
-      );
-    });
-
-    try {
-      await task;
-
-      setUploading(false);
-      Alert.alert(
-        'Image uploaded',
-        'Your image has been uploaded to the Firebase Cloud Storage Successfully',
-      );
-    } catch (error) {
-      console.log(error);
-    }
-  };
-
-  // console.log(imagesList);
-
   return (
     <GestureHandlerRootView style={{flex: 1}}>
       <KeyboardAvoidingView
@@ -182,28 +136,21 @@ const CreatePostScreen: React.FC<Props> = props => {
           </TouchableOpacity>
           <TouchableOpacity
             style={[styles.buttonNext, isValidation() && styles.buttonVisible]}
-            // disabled={isValidation() == false}
-            // onPress={() => {
-            // navigation.navigate(Routes.Hashtag, {});
-            // }}>
-            onPress={submitImages}>
+            disabled={isValidation() == false}
+            onPress={() => {
+              navigation.navigate(Routes.Hashtag, {
+                title: title,
+                caption: caption,
+                imagesList: imagesList,
+              });
+            }}>
+            {/* onPress={uploadImages}> */}
             <Text
               style={[styles.textNext, isValidation() && styles.textVisible]}>
               Tiếp
             </Text>
           </TouchableOpacity>
         </View>
-        {uploading && (
-          <View
-            style={{
-              justifyContent: 'center',
-              alignItems: 'center',
-              marginBottom: 20,
-            }}>
-            <Text>{transferred} % completed</Text>
-            <ActivityIndicator size={'large'} color={'#0000ff'} />
-          </View>
-        )}
         <ScrollView
           style={styles.bodyContainer}
           showsVerticalScrollIndicator={false}>

@@ -90,7 +90,7 @@ const PostItem: React.FC<PostProps> = ({post}) => {
 
       {post.cap.length > 0 && <Caption caption={post.cap} />}
 
-      {post.images.length > 0 && (
+      {post.images!.length > 0 && (
         <View style={styles.listImage}>
           {post.images!.slice(0, 3).map(renderImage)}
           <View></View>

@@ -1,4 +1,6 @@
 import {
+  ActivityIndicator,
+  Alert,
   Image,
   NativeSyntheticEvent,
   ScrollView,
@@ -9,24 +11,27 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
-import React, {useCallback, useRef, useState} from 'react';
+import React, {useCallback, useEffect, useRef, useState} from 'react';
 import {
   RootNavigationProp,
   RootRouteProp,
   Routes,
 } from '../base/types/navigation';
-import {Hashtag, PostClassification} from '../base/types/post';
+import {Hashtag, Post, PostClassification, UserPost} from '../base/types/post';
 import {GestureHandlerRootView} from 'react-native-gesture-handler';
 import Icon from 'react-native-vector-icons/FontAwesome5';
 import {useNavigation} from '@react-navigation/native';
 import colors from '../base/utils/colors';
-import distances from '../base/utils/distances';
 import ChoiceBottomSheet, {
   ChoiceBottomSheetRefProps,
 } from '../base/components/ChoiceBottomSheet';
-import images from '../base/utils/images';
 import {hashtagHotList} from '../data/Posts';
 import HashtagItem from './HashtagItem';
+import storage from '@react-native-firebase/storage';
+import {firebase} from '@react-native-firebase/database';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import {User} from '../base/types/user';
+import images from '../base/utils/images';
 
 interface Props {
   navigation: RootNavigationProp<Routes.Hashtag>;
@@ -34,10 +39,14 @@ interface Props {
 }
 
 const HashtagScreen: React.FC<Props> = props => {
+  const {title, caption, imagesList} = props.route.params;
   const navigation = useNavigation<RootNavigationProp<Routes.Hashtag>>();
   const [classification, setClassification] = useState<PostClassification>();
   const [hashtag, setHashtag] = useState<string[]>([]);
   const [inputHashtag, setInputHashtag] = useState<string>('');
+  const [uploading, setUploading] = useState<boolean>(false);
+  const [transferred, setTransferred] = useState(0);
+
   const listClassification = [
     PostClassification.CHARACTER,
     PostClassification.MOVIE,
@@ -47,6 +56,175 @@ const HashtagScreen: React.FC<Props> = props => {
 
   const refClassification = useRef<ChoiceBottomSheetRefProps>(null);
   const refHashtag = useRef<ChoiceBottomSheetRefProps>(null);
+  const imagesRef = useRef<string[]>([]);
+  const hashtagRemoteRef = useRef<Hashtag[]>([]);
+
+  const uploadImages = async (image: string) => {
+    const uploadUri = image;
+    let filename = uploadUri.substring(uploadUri.lastIndexOf('/') + 1);
+    const extension = filename.split('.').pop();
+    const name = filename.split('.').slice(0, -1).join('.');
+    filename = name + Date.now() + extension;
+
+    const myInfoJson = await AsyncStorage.getItem('infoUser');
+    const myInfo: User = myInfoJson != null ? JSON.parse(myInfoJson) : null;
+
+    setUploading(true);
+    setTransferred(0);
+
+    const storageRef = storage().ref(`images/${myInfo.id}/${filename}`);
+    const task = storageRef.putFile(uploadUri);
+
+    //set transferred state
+    task.on('state_changed', taskSnapshot => {
+      setTransferred(
+        Math.round(taskSnapshot.bytesTransferred / taskSnapshot.totalBytes) *
+          100,
+      );
+    });
+
+    try {
+      await task;
+      const url = await storageRef.getDownloadURL();
+      // setUploading(false);
+      return url;
+    } catch (error) {
+      console.log(error);
+      return null;
+    }
+  };
+
+  const getImageUrl = async () => {
+    imagesList!.forEach(async element => {
+      const imageUrl = await uploadImages(element);
+      imagesRef.current.push(imageUrl!);
+    });
+  };
+
+  const getHashtag = async () => {
+    try {
+      await firebase
+        .app()
+        .database('https://post-app-505ea-default-rtdb.firebaseio.com/')
+        .ref(`/hashtag`)
+        .once('value')
+        .then(async snapshot => {
+          const hashtagObject = snapshot.val();
+          const hashtagArray: Hashtag[] = Object.keys(hashtagObject).map(
+            eachKey => {
+              let eachObject = hashtagObject[eachKey];
+              return {
+                hashtag: eachObject.hashtag,
+                count: eachObject.count,
+                lastTimestamp: eachObject.lastTimestamp,
+              };
+            },
+          );
+          hashtagRemoteRef.current = hashtagArray;
+        });
+    } catch (e) {}
+  };
+
+  const uploadHashtag = async () => {
+    const timestamp = Date.now();
+    const hashtagsObject: Hashtag[] = hashtag.map(eachHashtag => {
+      return {
+        hashtag: eachHashtag,
+        count: 1,
+        lastTimestamp: timestamp,
+      };
+    });
+    const hashtagRemoteCurrent = hashtagRemoteRef.current.map(value => {
+      for (let i = 0; i < hashtagsObject.length; i++) {
+        if (hashtagsObject[i].hashtag === value.hashtag) {
+          hashtagsObject.splice(i, 1);
+          return {
+            hashtag: value.hashtag,
+            count: value.count + 1,
+            lastTimestamp: timestamp,
+          };
+        }
+      }
+      return {
+        hashtag: value.hashtag,
+        count: value.count,
+        lastTimestamp: timestamp,
+      };
+    });
+    let hashtagArrayRemote;
+    if (hashtagsObject.length > 0) {
+      hashtagArrayRemote = hashtagRemoteCurrent.concat(hashtagsObject);
+    }
+    hashtagArrayRemote = hashtagArrayRemote!.sort(
+      (item1, item2) => -item1!.count + item2!.count,
+    );
+    await firebase
+      .app()
+      .database('https://post-app-505ea-default-rtdb.firebaseio.com/')
+      .ref(`/hashtag`)
+      .set(hashtagArrayRemote)
+      .then(() => {});
+  };
+
+  const uploadPost = async () => {
+    try {
+      const myInfoJson = await AsyncStorage.getItem('infoUser');
+      const myInfo: User = myInfoJson != null ? JSON.parse(myInfoJson) : null;
+      const owner: UserPost = {
+        name: myInfo.name!,
+        avatar: myInfo.avatar!,
+        id: myInfo.id!,
+        email: myInfo.email,
+      };
+      const timestamp = Date.now();
+      const postInfo: Post = {
+        id: myInfo.id! + timestamp + '',
+        title: title!,
+        cap: caption!,
+        images: imagesRef.current,
+        comment: [],
+        owner: owner,
+        like: [],
+        hashtag: hashtag,
+        classification: classification,
+        timestamp: timestamp,
+      };
+      setUploading(false);
+      await firebase
+        .app()
+        .database('https://post-app-505ea-default-rtdb.firebaseio.com/')
+        .ref(`/myPosts/${myInfo.id}/${myInfo.id! + timestamp}`)
+        .set(postInfo)
+        .then(() => {});
+      await firebase
+        .app()
+        .database('https://post-app-505ea-default-rtdb.firebaseio.com/')
+        .ref(`/allPosts/${myInfo.id! + timestamp}`)
+        .set(postInfo)
+        .then(() => {
+          Alert.alert(
+            'Bài đã được đăng',
+            'Bài viết của bạn đã được đăng thành công',
+            [
+              {
+                text: 'OK',
+                onPress: async () => {
+                  // navigation.navigate(Routes.BottomTab, {});
+                  uploadHashtag();
+                },
+              },
+            ],
+          );
+        });
+    } catch (e) {}
+  };
+
+  const submitPost = async () => {
+    await getImageUrl();
+    setTimeout(() => {
+      uploadPost();
+    }, 4000);
+  };
 
   const onPressSelectClassification = useCallback(() => {
     const isActive = refClassification?.current?.isActive();
@@ -163,6 +341,10 @@ const HashtagScreen: React.FC<Props> = props => {
     );
   };
 
+  useEffect(() => {
+    getHashtag();
+  }, []);
+
   return (
     <GestureHandlerRootView style={{flex: 1}}>
       <View style={{flex: 1}}>
@@ -176,14 +358,25 @@ const HashtagScreen: React.FC<Props> = props => {
           </TouchableOpacity>
           <TouchableOpacity
             style={[styles.buttonNext, isValidation() && styles.buttonVisible]}
-            disabled={isValidation() == false}
-            onPress={() => {}}>
+            // disabled={isValidation() == false}
+            onPress={submitPost}>
             <Text
               style={[styles.textNext, isValidation() && styles.textVisible]}>
               Đăng
             </Text>
           </TouchableOpacity>
         </View>
+        {uploading && (
+          <View
+            style={{
+              justifyContent: 'center',
+              alignItems: 'center',
+              marginBottom: 20,
+            }}>
+            <Text>{transferred} % completed</Text>
+            <ActivityIndicator size={'large'} color={'#0000ff'} />
+          </View>
+        )}
         <View style={styles.bodyContainer}>
           <View style={styles.selectContainer}>
             <View style={styles.selectClassification}>

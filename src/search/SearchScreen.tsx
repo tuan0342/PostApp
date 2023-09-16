@@ -8,7 +8,7 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
-import React, {useEffect, useState} from 'react';
+import React, {useCallback, useEffect, useRef, useState} from 'react';
 import {
   BottomTabNavigationProp,
   BottomTabRouteProp,
@@ -17,11 +17,10 @@ import {
 import Icon from 'react-native-vector-icons/FontAwesome5';
 import distances from '../base/utils/distances';
 import colors from '../base/utils/colors';
-import {hashtagHotList} from '../data/Posts';
 import HashtagRecommendItem from './HashtagRecommendItem';
 import {Hashtag, Post} from '../base/types/post';
-import {postCommunity} from '../data/Posts';
 import PostItem from '../posts/PostItem';
+import {firebase} from '@react-native-firebase/database';
 
 interface SearchScreenProps {
   navigation: BottomTabNavigationProp<Routes.Search>;
@@ -32,18 +31,79 @@ const SearchScreen: React.FC<SearchScreenProps> = props => {
   const [textSearch, setTextSearch] = useState<string>('');
   const [searching, setSearching] = useState<boolean>();
   const [dataSearch, setDataSearch] = useState<Post[]>([]);
+  const [hotHashtags, setHotHashtag] = useState<Hashtag[]>([]);
+  const [postsCommunity, setPostsCommunity] = useState<Post[]>();
+
+  const getHashtag = useCallback(async () => {
+    try {
+      await firebase
+        .app()
+        .database('https://post-app-505ea-default-rtdb.firebaseio.com/')
+        .ref(`/hashtag`)
+        .limitToFirst(6)
+        .once('value')
+        .then(async snapshot => {
+          const hashtagObject = snapshot.val();
+          const hashtagArray: Hashtag[] = Object.keys(hashtagObject).map(
+            eachKey => {
+              let eachObject = hashtagObject[eachKey];
+              return {
+                hashtag: eachObject.hashtag,
+                count: eachObject.count,
+                lastTimestamp: eachObject.lastTimestamp,
+              };
+            },
+          );
+          setHotHashtag(hashtagArray);
+        });
+    } catch (e) {}
+  }, []);
+
+  const getPostCommunity = useCallback(async () => {
+    try {
+      await firebase
+        .app()
+        .database('https://post-app-505ea-default-rtdb.firebaseio.com/')
+        .ref(`allPosts`)
+        .once('value')
+        .then(async snapshot => {
+          const postsObject = snapshot.val();
+          const postsArray: Post[] = Object.keys(postsObject)
+            .map(eachKey => {
+              let eachObject = postsObject[eachKey];
+              return {
+                id: eachObject.id,
+                title: eachObject.title,
+                cap: eachObject.cap,
+                images: eachObject.images,
+                hashtag: eachObject.hashtag,
+                classification: eachObject.classification,
+                timestamp: eachObject.timestamp,
+                like: eachObject.like === undefined ? [] : eachObject.like,
+                comment:
+                  eachObject.comment === undefined ? [] : eachObject.comment,
+                owner: eachObject.owner,
+              };
+            })
+            .sort((item1, item2) => -item1.timestamp + item2.timestamp);
+          setPostsCommunity(postsArray);
+        });
+    } catch (e) {}
+  }, []);
 
   useEffect(() => {
+    getPostCommunity();
     if (props.route.params !== undefined) {
       setTextSearch(props.route.params.hashtagSearch!);
-      filteredPosts(props.route.params.hashtagSearch!);
       setSearching(true);
+      // filteredPosts(props.route.params.hashtagSearch!);
     }
-  }, []);
+    getHashtag();
+  }, [getHashtag, getPostCommunity]);
 
   const filteredPosts = async (text: string) => {
     setDataSearch([]);
-    let posts: Post[] = postCommunity.filter(eachPost => {
+    let posts: Post[] = postsCommunity!.filter(eachPost => {
       const exist = eachPost.hashtag.some((eachHashtag, index) => {
         return eachHashtag.toLowerCase().includes(text.toLowerCase());
       });
@@ -84,7 +144,6 @@ const SearchScreen: React.FC<SearchScreenProps> = props => {
               nativeEvent: NativeSyntheticEvent<TextInputSubmitEditingEventData>,
             ) => {
               setSearching(true);
-              // filteredPosts();
               filteredPosts(nativeEvent.nativeEvent.text);
             }}
             placeholder="Tìm kiếm bài đăng"
@@ -119,11 +178,12 @@ const SearchScreen: React.FC<SearchScreenProps> = props => {
           )}
         </View>
       ) : (
-        <View>
+        <View style={{flex: 1}}>
           <Text style={styles.textHashtagRecommend}>Chủ Đề Đề Xuất</Text>
           <FlatList
-            data={hashtagHotList}
+            data={hotHashtags}
             renderItem={renderHashtagRecommendItem}
+            keyExtractor={item => item.hashtag}
           />
         </View>
       )}

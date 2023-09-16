@@ -21,6 +21,7 @@ import {
 } from '../base/types/navigation';
 import {useNavigation} from '@react-navigation/native';
 import {Hashtag} from '../base/types/post';
+import {firebase} from '@react-native-firebase/database';
 
 interface PostScreenProps {
   navigation: BottomTabNavigationProp<Routes.Posts>;
@@ -35,6 +36,7 @@ export type OptionComponentProps = {
 export type HashtagHotProps = {
   hashtagsHot: Hashtag[];
   navigation: RootNavigationProp<Routes.BottomTab>;
+  postsCommunity: Post[];
 };
 
 enum Option {
@@ -48,12 +50,64 @@ const PostsScreen: React.FC<PostScreenProps> = props => {
   const [postsCommunity, setPostsCommunity] = useState<Post[]>();
   const [postsFollowing, setPostsFollowing] = useState<Post[]>();
   const [refreshing, setRefreshing] = React.useState(false);
+  const [hotHashtags, setHotHashtag] = useState<Hashtag[]>([]);
 
-  const getPostCommunity = useCallback(() => {
-    setPostsCommunity(postCommunity);
-    setTimeout(() => {
-      setRefreshing(false);
-    }, 2000);
+  const getHashtag = useCallback(async () => {
+    try {
+      await firebase
+        .app()
+        .database('https://post-app-505ea-default-rtdb.firebaseio.com/')
+        .ref(`/hashtag`)
+        .limitToFirst(6)
+        .once('value')
+        .then(async snapshot => {
+          const hashtagObject = snapshot.val();
+          const hashtagArray: Hashtag[] = Object.keys(hashtagObject).map(
+            eachKey => {
+              let eachObject = hashtagObject[eachKey];
+              return {
+                hashtag: eachObject.hashtag,
+                count: eachObject.count,
+                lastTimestamp: eachObject.lastTimestamp,
+              };
+            },
+          );
+          setHotHashtag(hashtagArray);
+        });
+    } catch (e) {}
+  }, []);
+
+  const getPostCommunity = useCallback(async () => {
+    try {
+      await firebase
+        .app()
+        .database('https://post-app-505ea-default-rtdb.firebaseio.com/')
+        .ref(`allPosts`)
+        .once('value')
+        .then(async snapshot => {
+          const postsObject = snapshot.val();
+          const postsArray: Post[] = Object.keys(postsObject)
+            .map(eachKey => {
+              let eachObject = postsObject[eachKey];
+              return {
+                id: eachObject.id,
+                title: eachObject.title,
+                cap: eachObject.cap,
+                images: eachObject.images,
+                hashtag: eachObject.hashtag,
+                classification: eachObject.classification,
+                timestamp: eachObject.timestamp,
+                like: eachObject.like === undefined ? [] : eachObject.like,
+                comment:
+                  eachObject.comment === undefined ? [] : eachObject.comment,
+                owner: eachObject.owner,
+              };
+            })
+            .sort((item1, item2) => -item1.timestamp + item2.timestamp);
+          setPostsCommunity(postsArray);
+          setRefreshing(false);
+        });
+    } catch (e) {}
   }, []);
 
   const getPostFollowing = useCallback(() => {
@@ -94,18 +148,23 @@ const PostsScreen: React.FC<PostScreenProps> = props => {
   };
 
   useEffect(() => {
+    getHashtag();
     if (option === Option.COMMUNITY) {
       getPostCommunity();
     } else {
       getPostFollowing();
     }
-  }, [option]);
+  }, [option, getPostCommunity, getPostFollowing, getHashtag]);
 
   return (
     <View style={{backgroundColor: 'white', flex: 1}}>
       <OptionComponent option={option} setOption={setOption} />
 
-      <HashtagHot hashtagsHot={hashtagHotList} navigation={navigation} />
+      <HashtagHot
+        hashtagsHot={hotHashtags}
+        navigation={navigation}
+        postsCommunity={postsCommunity!}
+      />
 
       {option === Option.COMMUNITY && (
         <FlatList
@@ -136,9 +195,16 @@ const PostsScreen: React.FC<PostScreenProps> = props => {
   );
 };
 
-const HashtagHot: React.FC<HashtagHotProps> = ({hashtagsHot, navigation}) => {
+const HashtagHot: React.FC<HashtagHotProps> = ({
+  hashtagsHot,
+  navigation,
+  postsCommunity,
+}) => {
   const onPressHashtag = (item: string) => {
-    navigation.navigate(Routes.Search, {hashtagSearch: item});
+    navigation.navigate(Routes.Search, {
+      hashtagSearch: item,
+      posts: postsCommunity,
+    });
   };
   const renderHashtagHotItem = ({item}: {item: Hashtag}) => {
     return (
@@ -172,7 +238,7 @@ const HashtagHot: React.FC<HashtagHotProps> = ({hashtagsHot, navigation}) => {
           Chủ đề Hot
         </Text>
         <FlatList
-          data={hashtagHotList}
+          data={hashtagsHot}
           renderItem={renderHashtagHotItem}
           horizontal
         />
