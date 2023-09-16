@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "799600746350",
+    "project_id": "post-app-505ea",
+    "storage_bucket": "post-app-505ea.appspot.com"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:799600746350:android:51a1d336611be24bf86b7f",
+        "android_client_info": {
+          "package_name": "com.postapp"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDKQTY-_w7OBxbdAeAfij7nrTmuRMfomqA"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
