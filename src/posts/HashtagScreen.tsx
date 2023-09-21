@@ -99,6 +99,11 @@ const HashtagScreen: React.FC<Props> = props => {
       const imageUrl = await uploadImages(element);
       imagesRef.current.push(imageUrl!);
     });
+
+    // let res = imagesList!.map(async element => {
+    //   return await uploadImages(element);
+    // });
+    // return res;
   };
 
   const getHashtag = async () => {
@@ -182,6 +187,7 @@ const HashtagScreen: React.FC<Props> = props => {
         title: title!,
         cap: caption!,
         images: imagesRef.current,
+        // images: abc,
         comment: [],
         owner: owner,
         like: [],
@@ -209,7 +215,7 @@ const HashtagScreen: React.FC<Props> = props => {
               {
                 text: 'OK',
                 onPress: async () => {
-                  // navigation.navigate(Routes.BottomTab, {});
+                  navigation.navigate(Routes.BottomTab, {});
                   uploadHashtag();
                 },
               },
@@ -221,9 +227,9 @@ const HashtagScreen: React.FC<Props> = props => {
 
   const submitPost = async () => {
     await getImageUrl();
-    setTimeout(() => {
-      uploadPost();
-    }, 4000);
+    setTimeout(async () => {
+      await uploadPost();
+    }, 10000);
   };
 
   const onPressSelectClassification = useCallback(() => {
@@ -372,6 +378,7 @@ const HashtagScreen: React.FC<Props> = props => {
               justifyContent: 'center',
               alignItems: 'center',
               marginBottom: 20,
+              backgroundColor: '#f5f6fb',
             }}>
             <Text>{transferred} % completed</Text>
             <ActivityIndicator size={'large'} color={'#0000ff'} />

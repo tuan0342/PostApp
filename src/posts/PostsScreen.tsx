@@ -22,6 +22,7 @@ import {
 import {useNavigation} from '@react-navigation/native';
 import {Hashtag} from '../base/types/post';
 import {firebase} from '@react-native-firebase/database';
+import PostImageList from './PostImageList';
 
 interface PostScreenProps {
   navigation: BottomTabNavigationProp<Routes.Posts>;

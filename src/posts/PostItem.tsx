@@ -14,6 +14,7 @@ import moment from 'moment';
 import distances from '../base/utils/distances';
 import {hashtagHotList} from '../data/Posts';
 import {Hashtag} from '../base/types/post';
+import PostImageList from './PostImageList';
 
 export type PostProps = {
   post: Post;
@@ -35,10 +36,22 @@ export type InteractProps = {
 };
 
 const PostItem: React.FC<PostProps> = ({post}) => {
+  const [imageVisible, setImageVisible] = useState(false);
+  const [imageIndex, setImageIndex] = useState<number>(0);
+
   const width =
     post.images!.length > 3
       ? (distances.width - 50) / 3
       : (distances.width - 50) / post.images!.length;
+
+  const handleCloseImageScreen = () => {
+    setImageVisible(false);
+  };
+
+  const handleOpenImageScreen = (index: number) => {
+    setImageIndex(index);
+    setImageVisible(true);
+  };
 
   const renderImage = (image: string, index: number) => {
     return (
@@ -48,7 +61,8 @@ const PostItem: React.FC<PostProps> = ({post}) => {
           width: width,
           height: '100%',
           marginRight: index !== 3 ? 5 : 0,
-        }}>
+        }}
+        onPress={() => handleOpenImageScreen(index)}>
         <Image
           source={{uri: image}}
           style={{
@@ -100,6 +114,12 @@ const PostItem: React.FC<PostProps> = ({post}) => {
       {post.hashtag.length > 0 && <HashtagInPost hashtags={post.hashtag} />}
 
       <Interact like={post.like} comment={post.comment} />
+      <PostImageList
+        visible={imageVisible}
+        onClose={handleCloseImageScreen}
+        index={imageIndex}
+        images={post.images!}
+      />
     </View>
   );
 };
